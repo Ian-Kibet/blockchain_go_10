@@ -6,7 +6,9 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"math/big"
+	"os"
 	"strings"
 
 	"encoding/gob"
@@ -193,7 +195,7 @@ func NewCoinbaseTX(to, data string) *Transaction {
 }
 
 // NewUTXOTransaction creates a new transaction
-func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet) *Transaction {
+func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet, http bool) (*Transaction, error) {
 	var inputs []TXInput
 	var outputs []TXOutput
 
@@ -201,13 +203,20 @@ func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet)
 	acc, validOutputs := UTXOSet.FindSpendableOutputs(pubKeyHash, amount)
 
 	if acc < amount {
+		if http {
+			return nil, errors.New(`{"message": "Not enough funds"}`)
+		}
 		log.Panic("ERROR: Not enough funds")
+		os.Exit(1)
 	}
 
 	// Build a list of inputs
 	for txid, outs := range validOutputs {
 		txID, err := hex.DecodeString(txid)
 		if err != nil {
+			if http {
+				return nil, errors.New(err.Error())
+			}
 			log.Panic(err)
 		}
 
@@ -228,7 +237,7 @@ func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet)
 	tx.ID = tx.Hash()
 	UTXOSet.Blockchain.SignTransaction(&tx, wallet.PrivateKey)
 
-	return &tx
+	return &tx, nil
 }
 
 // DeserializeTransaction deserializes a transaction

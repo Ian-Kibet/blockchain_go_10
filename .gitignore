@@ -1,4 +1,4 @@
-*.db
+blockchain*.db
 *.dat
 go.sum
 go.mod

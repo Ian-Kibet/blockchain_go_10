@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/elliptic"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -28,8 +29,8 @@ func NewWallets(nodeID string) (*Wallets, error) {
 }
 
 // CreateWallet adds a Wallet to Wallets
-func (ws *Wallets) CreateWallet() string {
-	wallet := NewWallet()
+func (ws *Wallets) CreateWallet(alias string) string {
+	wallet := NewWallet(alias)
 	address := fmt.Sprintf("%s", wallet.GetAddress())
 
 	ws.Wallets[address] = wallet
@@ -46,6 +47,28 @@ func (ws *Wallets) GetAddresses() []string {
 	}
 
 	return addresses
+}
+
+// GetAliases returns an array of aliases stored in the wallet file
+func (ws *Wallets) GetAliases() []string {
+	var aliases []string
+
+	for _, w := range ws.Wallets {
+		aliases = append(aliases, w.Alias)
+	}
+
+	return aliases
+}
+
+func (ws *Wallets) GetWalletByAlias(a string) (*Wallet, error) {
+	fmt.Printf("wallet %v", a)
+	for _, w := range ws.Wallets {
+		if w.Alias == a {
+			return w, nil
+		}
+	}
+
+	return nil, errors.New(`{"message":"Wallet not found"}`)
 }
 
 // GetWallet returns a Wallet by its address

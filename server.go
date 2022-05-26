@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
 )
 
 const protocol = "tcp"
@@ -17,7 +18,7 @@ const commandLength = 12
 
 var nodeAddress string
 var miningAddress string
-var knownNodes = []string{"localhost:9000"}
+var knownNodes = []string{"0.tcp.in.ngrok.io:12552"}
 var blocksInTransit = [][]byte{}
 var mempool = make(map[string]Transaction)
 
@@ -199,7 +200,7 @@ func handleBlock(request []byte, bc *Blockchain) {
 	blockData := payload.Block
 	block := DeserializeBlock(blockData)
 
-	fmt.Println("Recevied a new block!")
+	fmt.Println("Received a new block!")
 	bc.AddBlock(block)
 
 	fmt.Printf("Added block %x\n", block.Hash)
@@ -226,7 +227,7 @@ func handleInv(request []byte, bc *Blockchain) {
 		log.Panic(err)
 	}
 
-	fmt.Printf("Recevied inventory with %d %s\n", len(payload.Items), payload.Type)
+	fmt.Printf("Received inventory with %d %s\n", len(payload.Items), payload.Type)
 
 	if payload.Type == "block" {
 		blocksInTransit = payload.Items
@@ -419,7 +420,11 @@ func handleConnection(conn net.Conn, bc *Blockchain) {
 
 // StartServer starts a node
 func StartServer(nodeID, minerAddress string) {
-	nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
+	address := os.Getenv("ADDRESS")
+	nodeAddress = address
+	if len(address) < 2 {
+		nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
+	}
 	miningAddress = minerAddress
 	ln, err := net.Listen(protocol, nodeAddress)
 	if err != nil {

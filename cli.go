@@ -14,13 +14,14 @@ type CLI struct{}
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  createblockchain -address ADDRESS - Create a blockchain and send genesis block reward to ADDRESS")
-	fmt.Println("  createwallet - Generates a new key-pair and saves it into the wallet file")
+	fmt.Println("  createwallet -alias ALIAS (Optional) - Generates a new key-pair and saves it into the wallet file. You can add an optional wallet alias.")
 	fmt.Println("  getbalance -address ADDRESS - Get balance of ADDRESS")
 	fmt.Println("  listaddresses - Lists all addresses from the wallet file")
 	fmt.Println("  printchain - Print all the blocks of the blockchain")
 	fmt.Println("  reindexutxo - Rebuilds the UTXO set")
 	fmt.Println("  send -from FROM -to TO -amount AMOUNT -mine - Send AMOUNT of coins from FROM address to TO. Mine on the same node, when -mine is set.")
 	fmt.Println("  startnode -miner ADDRESS - Start a node with ID specified in NODE_ID env. var. -miner enables mining")
+	fmt.Println("  http -port PORT - Start a http server on PORT")
 }
 
 func (cli *CLI) validateArgs() {
@@ -49,14 +50,17 @@ func (cli *CLI) Run() {
 	reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
+	startServerCmd := flag.NewFlagSet("http", flag.ExitOnError)
 
 	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
+	createWallet := createWalletCmd.String("alias", "", "Wallet alias, Example ian.go10")
 	sendFrom := sendCmd.String("from", "", "Source wallet address")
 	sendTo := sendCmd.String("to", "", "Destination wallet address")
 	sendAmount := sendCmd.Int("amount", 0, "Amount to send")
 	sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
 	startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
+	startHttpServer := startServerCmd.String("port", "", "Start Http Server on port")
 
 	switch os.Args[1] {
 	case "getbalance":
@@ -99,6 +103,11 @@ func (cli *CLI) Run() {
 		if err != nil {
 			log.Panic(err)
 		}
+	case "http":
+		err := startServerCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	default:
 		cli.printUsage()
 		os.Exit(1)
@@ -121,7 +130,7 @@ func (cli *CLI) Run() {
 	}
 
 	if createWalletCmd.Parsed() {
-		cli.createWallet(nodeID)
+		cli.createWallet(nodeID, *createWallet)
 	}
 
 	if listAddressesCmd.Parsed() {
@@ -152,5 +161,14 @@ func (cli *CLI) Run() {
 			os.Exit(1)
 		}
 		cli.startNode(nodeID, *startNodeMiner)
+	}
+
+	if startServerCmd.Parsed() {
+		nodeID := os.Getenv("NODE_ID")
+		if nodeID == "" {
+			startServerCmd.Usage()
+			os.Exit(1)
+		}
+		cli.startHttpServer(*startHttpServer)
 	}
 }

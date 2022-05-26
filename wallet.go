@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"log"
+	"strings"
 
 	"golang.org/x/crypto/ripemd160"
 )
@@ -18,12 +19,13 @@ const addressChecksumLen = 4
 type Wallet struct {
 	PrivateKey ecdsa.PrivateKey
 	PublicKey  []byte
+	Alias      string
 }
 
 // NewWallet creates and returns a Wallet
-func NewWallet() *Wallet {
+func NewWallet(alias string) *Wallet {
 	private, public := newKeyPair()
-	wallet := Wallet{private, public}
+	wallet := Wallet{private, public, alias}
 
 	return &wallet
 }
@@ -39,6 +41,24 @@ func (w Wallet) GetAddress() []byte {
 	address := Base58Encode(fullPayload)
 
 	return address
+}
+
+// GetBalance returns wallet balance
+func (w Wallet) GetBalance(nodeID string) int {
+	bc := NewBlockchain(nodeID)
+	UTXOSet := UTXOSet{bc}
+	defer bc.db.Close()
+
+	balance := 0
+	pubKeyHash := Base58Decode([]byte(w.GetAddress()))
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	UTXOs := UTXOSet.FindUTXO(pubKeyHash)
+
+	for _, out := range UTXOs {
+		balance += out.Value
+	}
+
+	return balance
 }
 
 // HashPubKey hashes public key
@@ -57,6 +77,10 @@ func HashPubKey(pubKey []byte) []byte {
 
 // ValidateAddress check if address if valid
 func ValidateAddress(address string) bool {
+	if strings.Contains(address, ".go10") {
+		return true
+	}
+
 	pubKeyHash := Base58Decode([]byte(address))
 	actualChecksum := pubKeyHash[len(pubKeyHash)-addressChecksumLen:]
 	version := pubKeyHash[0]

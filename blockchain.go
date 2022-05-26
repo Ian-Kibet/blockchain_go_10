@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -24,16 +25,48 @@ type Blockchain struct {
 
 // CreateBlockchain creates a new blockchain DB
 func CreateBlockchain(address, nodeID string) *Blockchain {
+	genesisDbFile := "genesis.db"
+	if !dbExists(genesisDbFile) {
+		cbtx := NewCoinbaseTX(address, genesisCoinbaseData)
+		genesis := NewGenesisBlock(cbtx)
+
+		db, err := bolt.Open(genesisDbFile, 0600, nil)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		err = db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte(blocksBucket))
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = b.Put(genesis.Hash, genesis.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = b.Put([]byte("l"), genesis.Hash)
+			if err != nil {
+				log.Panic(err)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+
 	dbFile := fmt.Sprintf(dbFile, nodeID)
+
 	if dbExists(dbFile) {
-		fmt.Println("Blockchain already exists.")
+		fmt.Printf("Blockchain db for node %v already exists.\n\n", nodeID)
 		os.Exit(1)
 	}
 
-	var tip []byte
+	CopyFile(genesisDbFile, dbFile)
 
-	cbtx := NewCoinbaseTX(address, genesisCoinbaseData)
-	genesis := NewGenesisBlock(cbtx)
+	var tip []byte
 
 	db, err := bolt.Open(dbFile, 0600, nil)
 	if err != nil {
@@ -41,21 +74,8 @@ func CreateBlockchain(address, nodeID string) *Blockchain {
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte(blocksBucket))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		err = b.Put(genesis.Hash, genesis.Serialize())
-		if err != nil {
-			log.Panic(err)
-		}
-
-		err = b.Put([]byte("l"), genesis.Hash)
-		if err != nil {
-			log.Panic(err)
-		}
-		tip = genesis.Hash
+		b := tx.Bucket([]byte(blocksBucket))
+		tip = b.Get([]byte("l"))
 
 		return nil
 	})
@@ -63,15 +83,35 @@ func CreateBlockchain(address, nodeID string) *Blockchain {
 		log.Panic(err)
 	}
 
-	bc := Blockchain{tip, db}
+	bcf := Blockchain{tip, db}
 
-	return &bc
+	return &bcf
+}
+
+func CopyFile(src string, dst string) {
+	fin, err := os.Open(src)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fin.Close()
+
+	fout, err := os.Create(dst)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fout.Close()
+
+	_, err = io.Copy(fout, fin)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // NewBlockchain creates a new Blockchain with genesis Block
 func NewBlockchain(nodeID string) *Blockchain {
 	dbFile := fmt.Sprintf(dbFile, nodeID)
-	if dbExists(dbFile) == false {
+	if !dbExists(dbFile) {
 		fmt.Println("No existing blockchain found. Create one first.")
 		os.Exit(1)
 	}
@@ -140,7 +180,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		block := bci.Next()
 
 		for _, tx := range block.Transactions {
-			if bytes.Compare(tx.ID, ID) == 0 {
+			if bytes.Equal(tx.ID, ID) {
 				return *tx, nil
 			}
 		}
@@ -150,7 +190,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		}
 	}
 
-	return Transaction{}, errors.New("Transaction is not found")
+	return Transaction{}, errors.New(`{"message":"Transaction not found"}`)
 }
 
 // FindUTXO finds all unspent transaction outputs and returns transactions with spent outputs removed
@@ -206,6 +246,11 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 
 // GetBestHeight returns the height of the latest block
 func (bc *Blockchain) GetBestHeight() int {
+	return bc.GetLastBlock().Height
+}
+
+// GetLastBlock returns the latest block
+func (bc *Blockchain) GetLastBlock() Block {
 	var lastBlock Block
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
@@ -220,7 +265,7 @@ func (bc *Blockchain) GetBestHeight() int {
 		log.Panic(err)
 	}
 
-	return lastBlock.Height
+	return lastBlock
 }
 
 // GetBlock finds a block by its hash and returns it
@@ -233,7 +278,7 @@ func (bc *Blockchain) GetBlock(blockHash []byte) (Block, error) {
 		blockData := b.Get(blockHash)
 
 		if blockData == nil {
-			return errors.New("Block is not found.")
+			return errors.New(`{"message":"Block not found"}`)
 		}
 
 		block = *DeserializeBlock(blockData)
