@@ -18,7 +18,7 @@ const commandLength = 12
 
 var nodeAddress string
 var miningAddress string
-var knownNodes = []string{"0.tcp.in.ngrok.io:12552"}
+var knownNodes = []string{"localhost:9000"}
 var blocksInTransit = [][]byte{}
 var mempool = make(map[string]Transaction)
 
